@@ -1,22 +1,26 @@
 import contextlib
 import sqlite3 as database_driver
 from collections.abc import Generator
-from sqlite3 import Cursor
+from sqlite3 import Connection, Cursor
 from sqlite3 import Error as DBError
 from sqlite3 import OperationalError as DBOperationalError
 from typing import Any
 
 
-class Db:
+class DB:
     def __init__(self, database_dsn: dict[str, Any]) -> None:
         self.database_dsn = database_dsn
 
     @contextlib.contextmanager
-    def connect(self) -> Generator[Cursor, Any, None]:
+    def connect(self) -> Generator[Cursor, None, None]:
         """
         Returns a Database Cursor that SQL Quries can be executed against.
 
         If connection is unsuccessful raise an error.
+
+        - Commits if no exception occurs.
+        - Rolls back if an exception occurs.
+        - Closes the connection when done.
         """
         print("Connecting to database...")
         conn = None
@@ -34,6 +38,33 @@ class Db:
         finally:
             if curr is not None:
                 curr.close()
+            if conn is not None:
+                conn.close()
+            print("Database connection closed.")
+
+    @contextlib.contextmanager
+    def raw_connect(self) -> Generator[Cursor, None, None]:
+        """
+        Returns a raw Database Connection.
+
+        If connection is unsuccessful raise an error.
+
+        - Commits if no exception occurs.
+        - Rolls back if an exception occurs.
+        - Closes the connection when done.
+        """
+        print("Connecting to database...")
+        conn = None
+        try:
+            conn = database_driver.connect(**self.database_dsn)
+            yield conn
+            conn.commit()
+        except (DBOperationalError, DBError) as error:
+            if conn is not None:
+                conn.rollback()
+            error_msg = f"Database connection failed: {error}"
+            raise RuntimeError(error_msg) from error
+        finally:
             if conn is not None:
                 conn.close()
             print("Database connection closed.")
